@@ -52,8 +52,11 @@ def get_search_results(config):
         config.root, config.discharge)
 
     snaps = []
-    url = '{}/api/v1/snaps/search?size=500&fields=snap_id,media'.format(
-        surl.CONSTANTS[config.store_env]['api_base_url'])
+    url = (
+        '{}/api/v1/snaps/search?size=500&'
+        'fields=snap_id,media,origin,developer_validation'
+        .format(surl.CONSTANTS[config.store_env]['api_base_url']))
+
     while url is not None:
         r = requests.get(url=url, headers=headers)
         r.raise_for_status()
@@ -94,6 +97,8 @@ def refresh_cache(snaps_cache, config):
             'snap_name': s['package_name'],
             'snap_id': s['snap_id'],
             'media': s['media'],
+            'developer_validation': s['developer_validation'],
+            'developer_username': s['origin']
         } for s in snaps
     }
 

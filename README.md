@@ -27,6 +27,8 @@ Saving cache (snaps.json)...
 (env) $ jq '.snaps | map(select(.snap_name == "surl"))' snaps.json
 [
   {
+    "developer_username": "cprov",
+    "developer_validation": "unproven",
     "installed_base": 110,
     "media": [
       {
@@ -39,6 +41,17 @@ Saving cache (snaps.json)...
     "updated_at": "2018-08-15"
   }
 ]
+
+
+(env) $ jq '.snaps | map(select(.media|length == 0)) | map(select(.developer_username != "canonical")) | sort_by(.installed_base) | reverse | .[:2] | .[] | {snap_name, installed_base}' snaps.json
+{
+  "snap_name": "etcd",
+  "installed_base": ????
+}
+{
+  "snap_name": "tor-mkg20001",
+  "installed_base": ????
+}
 
 ```
 
