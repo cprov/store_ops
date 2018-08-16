@@ -12,33 +12,9 @@ import sys
 import surl
 
 
-
 logging.basicConfig(format='\033[3;1m%(message)s\033[0m')
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
-
-
-def cached(path):
-    snaps_cache = {}
-    def decorator(func):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            snaps_cache = {'snaps': []}
-            try:
-                logger.info('Loading cache ({})...'.format(path))
-                with open(path) as fd:
-                    snaps_cache = json.load(fd)
-            except:
-                logger.warning('Missing/Cold cache ...')
-            try:
-                return func(snaps_cache, *args, **kwargs)
-            finally:
-                logger.info('Saving cache ({})...'.format(path))
-                with open(path, 'w') as fd:
-                    payload = json.dumps(snaps_cache, indent=2, sort_keys=True)
-                    fd.write(payload)
-        return wrapper
-    return decorator
 
 
 def _make_partition(seq, size):
@@ -78,16 +54,19 @@ def get_snap_metrics(filters, config):
 
     url = '{}/dev/api/snaps/metrics'.format(
         surl.CONSTANTS[config.store_env]['sca_base_url'])
-    payload = {"filters": filters}
-    r = requests.post(url=url, json=payload, headers=headers)
-    r.raise_for_status()
-    return r.json()['metrics']
+
+    metrics = []
+    for partition in _make_partition(filters, 400):
+        payload = {"filters": partition}
+        r = requests.post(url=url, json=payload, headers=headers)
+        r.raise_for_status()
+        metrics.extend(r.json()['metrics'])
+
+    return metrics
 
 
-@cached('snaps.json')
-def refresh_cache(snaps_cache, config):
+def fetch_snaps(config):
     logger.info('Fetching snaps ...')
-
     snaps = get_search_results(config)
 
     logger.info('Got {} snaps'.format(len(snaps)))
@@ -104,24 +83,21 @@ def refresh_cache(snaps_cache, config):
 
     yesterday = datetime.datetime.utcnow().date() - datetime.timedelta(1)
     start = end = yesterday.isoformat()
-    for partition in _make_partition(list(snap_map.keys()), 400):
-        logger.info('Fetching metrics for {} snaps ...'.format(len(partition)))
+    filters = [{
+        'metric_name': 'weekly_installed_base_by_channel',
+        'snap_id': snap_id, "start": start, "end": end
+    } for snap_id in snap_map.keys()]
 
-        filters = [{
-            'metric_name': 'weekly_installed_base_by_channel',
-            'snap_id': snap_id, "start": start, "end": end
-        } for snap_id in partition]
+    logger.info('Fetching metrics ...')
+    metrics = get_snap_metrics(filters, config)
+    for m in metrics:
+        snap_map[m['snap_id']].update({
+            'installed_base': sum([sum(ch['values']) for ch in m['series']]),
+        })
 
-        metrics = get_snap_metrics(filters, config)
-
-        for m in metrics:
-            snap_map[m['snap_id']].update({
-                'installed_base': sum([sum(ch['values']) for ch in m['series']]),
-                'updated_at': end
-            })
-
-    # Update cache. Eeew
-    snaps_cache['snaps'] = list(snap_map.values())
+    return {
+        'snaps': list(snap_map.values()),
+    }
 
 
 def main():
@@ -145,9 +121,15 @@ def main():
     except surl.CliDone:
         return 0
 
-    parser.add_argument('-v', '--debug', action='store_true',
-                        help='Prints request and response headers')
+    ACTIONS = {
+        'snaps': fetch_snaps,
+    }
 
+    parser.add_argument(
+        '-v', '--debug', action='store_true',
+        help='Prints request and response headers')
+    parser.add_argument(
+        'action', nargs='?', default='snaps', choices=ACTIONS.keys())
     args = parser.parse_args(remainder)
 
     if args.debug:
@@ -156,7 +138,18 @@ def main():
         requests_log.setLevel(logging.DEBUG)
         requests_log.propagate = True
 
-    refresh_cache(config)
+    json.dump(ACTIONS[args.action](config), sys.stdout)
+
+    # Flush STDOUT carefully, because PIPE might be broken.
+    def _noop(*args, **kwargs):
+        pass
+
+    try:
+        sys.stdout.buffer.flush()
+    except (BrokenPipeError, IOError):
+        sys.stdout.write = _noop
+        sys.stdout.flush = _noop
+        return 1
 
 
 if __name__ == '__main__':

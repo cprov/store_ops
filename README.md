@@ -8,23 +8,17 @@ $ virtualenv -p python3 env
 ...
 
 $ . env/bin/activate
+
 (env) $ ./setup.py develop
 ...
 
 
-(env) $ ./env/bin/store_ops.py -s production -e celso.providelo@canonical.com -p package_access -p package_metrics
+(env) $ ./store_ops.py -s production -e celso.providelo@canonical.com -p package_access -p package_metrics snaps | jq '.snaps | map(select(.snap_name == "surl"))'
 Password for celso.providelo@canonical.com: 🔑
 Second-factor auth for production: 🔑
-Loading cache (snaps.json)...
 Fetching snaps ...
 Got 1495 snaps
-Fetching metrics for 400 snaps ...
-Fetching metrics for 400 snaps ...
-Fetching metrics for 400 snaps ...
-Fetching metrics for 295 snaps ...
-Saving cache (snaps.json)...
-
-(env) $ jq '.snaps | map(select(.snap_name == "surl"))' snaps.json
+Fetching metrics ...
 [
   {
     "developer_username": "cprov",
@@ -41,21 +35,10 @@ Saving cache (snaps.json)...
     "updated_at": "2018-08-15"
   }
 ]
-
-
-(env) $ jq '.snaps | map(select(.media|length == 0)) | map(select(.developer_username != "canonical")) | sort_by(.installed_base) | reverse | .[:2] | .[] | {snap_name, installed_base}' snaps.json
-{
-  "snap_name": "etcd",
-  "installed_base": ????
-}
-{
-  "snap_name": "tor-mkg20001",
-  "installed_base": ????
-}
-
 ```
 
-By default, if `surl` snap is installed, the user prexisting credentials can be reused:
+By default, if `surl` snap is installed, the user's prexisting credentials will be reused:
+
 
 ```
 ./env/bin/store_ops.py -l
@@ -65,9 +48,38 @@ Available credendials:
 ...
 
 
-$ ./env/bin/store_ops.py -a prod-metrics
-Loading cache (snaps.json)...
+./store_ops.py -a prod-metrics snaps |  jq '.snaps | map(select(.media | map(select(.type == "icon")) | length == 0)) | map(select(.developer_username != "canonical")) | sort_by(.installed_base) | reverse | .[:2]'
 Fetching snaps ...
-...
-
+Got 1498 snaps
+Fetching metrics ...
+[
+  {
+    "snap_id": "SMmdWwqPVDscid2Ragxl3kLgGwfbTN5h",
+    "media": [
+      {
+        "url": "https://dashboard.snapcraft.io/site_media/appmedia/2018/05/trackmania.png",
+        "type": "screenshot"
+      },
+      ...
+    ],
+    "installed_base": <redacted>,
+    "developer_validation": "unproven",
+    "developer_username": "snapcrafters",
+    "snap_name": "tmnationsforever"
+  },
+  {
+    "snap_id": "JlrNGBIqwjdB64Hq94WTbELDWCjFwhta",
+    "media": [
+      {
+        "url": "https://dashboard.snapcraft.io/site_media/appmedia/2016/06/rename.screenshot.png",
+        "type": "screenshot"
+      },
+      ...
+    ],
+    "installed_base": <redacted>,
+    "developer_validation": "unproven",
+    "developer_username": "filebot",
+    "snap_name": "filebot"
+  }
+]
 ```
